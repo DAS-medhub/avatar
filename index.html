@@ -970,7 +970,7 @@
     </div>
 
     <script>
-        // ===== KEEP ALL EXISTING JS LOGIC =====
+        // Full improved JS section below
         const systemPrompt = `
 You are Rose — a warm, empathetic, and professional virtual health assistant. 
 Your role is to triage patients by analyzing their symptoms (via text, images, audio, or video) 
@@ -1073,8 +1073,6 @@ helping them decide whether to seek hospital care, consult a doctor, visit a pha
         const filePreview = document.getElementById('file-preview');
         const imageInput = document.getElementById('image-input');
         const audioInput = document.getElementById('audio-input');
-
-        // NEW: Action buttons
         const toggleActionsBtn = document.getElementById('toggle-actions');
         const actionsMenu = document.getElementById('actions-menu');
         const imageAction = document.getElementById('image-action');
@@ -1483,75 +1481,72 @@ helping them decide whether to seek hospital care, consult a doctor, visit a pha
             messagesDiv.appendChild(messageRow);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-        userInput.addEventListener('input', function() {
-            this.style.height = 'auto';
-            const maxHeight = window.innerWidth <= 480 ? 70 : (window.innerWidth <= 768 ? 80 : 120);
-            this.style.height = Math.min(this.scrollHeight, maxHeight) + 'px';
-        });
-async function sendMessage() {
-    const message = userInput.value.trim();
-    if (!message && attachedFiles.length === 0) return;
-    sendBtn.disabled = true;
-    sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    const displayMessage = message || 'Shared media files';
-    addMessage(displayMessage, true, attachedFiles.length > 0 ? [...attachedFiles] : null);
-    addMessageToConversation(displayMessage, true, attachedFiles.length > 0 ? [...attachedFiles] : null);
-    userInput.value = '';
-    userInput.style.height = 'auto';
-    const currentAttachments = [...attachedFiles];
-    attachedFiles = [];
-    updateFilePreview();
-    typingIndicator.style.display = 'flex';
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    const parts = [{ text: message || 'Please analyze the attached media files.' }];
-    currentAttachments.forEach(file => {
-        parts.push({
-            inline_data: { mime_type: file.type, data: file.data }
-        });
-    });
-    conversationHistory.push({ role: "user", parts });
-    try {
-        const response = await fetch('https://das-backend-dtdkv9caf-divines-projects-fd732195.vercel.app/api/generate-content', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: conversationHistory,
-                system_instruction: { parts: [{ text: systemPrompt }] },
-                generation_config: { 
-                    temperature: 0.7, 
-                    top_k: 40, 
-                    top_p: 0.8, 
-                    max_output_tokens: 2048 
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message && attachedFiles.length === 0) return;
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            const displayMessage = message || 'Shared media files';
+            addMessage(displayMessage, true, attachedFiles.length > 0 ? [...attachedFiles] : null);
+            addMessageToConversation(displayMessage, true, attachedFiles.length > 0 ? [...attachedFiles] : null);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            const currentAttachments = [...attachedFiles];
+            attachedFiles = [];
+            updateFilePreview();
+            typingIndicator.style.display = 'flex';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            const parts = [{ text: message || 'Please analyze the attached media files.' }];
+            currentAttachments.forEach(file => {
+                parts.push({
+                    inline_data: { mime_type: file.type, data: file.data }
+                });
+            });
+            conversationHistory.push({ role: "user", parts });
+            try {
+                const response = await fetch('https://das-backend-fmof305vi-divines-projects-fd732195.vercel.app/api/generate-content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: conversationHistory,
+                        system_instruction: { parts: [{ text: systemPrompt }] },
+                        generation_config: { 
+                            temperature: 0.7, 
+                            top_k: 40, 
+                            top_p: 0.8, 
+                            max_output_tokens: 2048 
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} - ${await response.text()}`);
                 }
-            })
-        });
 
-        if (!response.ok) {
-            throw new Error(`Proxy Error: ${response.status} - ${await response.text()}`);
+                const data = await response.json();
+                const aiResponse = data.candidates[0].content.parts[0].text;
+                typingIndicator.style.display = 'none';
+                addMessage(aiResponse, false);
+                addMessageToConversation(aiResponse, false);
+                conversationHistory.push({ role: "model", parts: [{ text: aiResponse }] });
+            } catch (error) {
+                console.error('API Error:', error);
+                typingIndicator.style.display = 'none';
+                let errorMessage = 'I apologize, but I’m having trouble connecting right now. Please check your internet connection and try again. If the problem persists, please refresh the page.';
+                if (error.message.includes('429')) {
+                    errorMessage = 'I’m receiving too many requests right now. Please wait a moment and try again.';
+                } else if (error.message.includes('403') || error.message.includes('401')) {
+                    errorMessage = 'There seems to be an authentication issue. Please ensure the backend is configured correctly and try again.';
+                } else if (error.message.includes('404')) {
+                    errorMessage = 'The backend server could not be found. Please contact support if this persists.';
+                }
+                addMessage(errorMessage, false);
+                addMessageToConversation(errorMessage, false);
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            }
         }
-
-        const data = await response.json();
-        const aiResponse = data.candidates[0].content.parts[0].text;
-        typingIndicator.style.display = 'none';
-        addMessage(aiResponse, false);
-        addMessageToConversation(aiResponse, false);
-        conversationHistory.push({ role: "model", parts: [{ text: aiResponse }] });
-    } catch (error) {
-        console.error('API Error:', error);
-        typingIndicator.style.display = 'none';
-        let errorMessage = 'I apologize, but I\'m having trouble connecting right now. Please check your internet connection and try again. If the problem persists, please refresh the page.';
-        if (error.message.includes('429')) {
-            errorMessage = 'I\'m receiving too many requests right now. Please wait a moment and try again.';
-        } else if (error.message.includes('403')) {
-            errorMessage = 'There seems to be an authentication issue. Please refresh the page and try again.';
-        }
-        addMessage(errorMessage, false);
-        addMessageToConversation(errorMessage, false);
-    } finally {
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-    }
-}
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -1579,8 +1574,6 @@ async function sendMessage() {
                 hideDeleteModal();
             }
         });
-
-        // NEW: Toggle action menu
         toggleActionsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             actionsMenu.classList.toggle('active');
